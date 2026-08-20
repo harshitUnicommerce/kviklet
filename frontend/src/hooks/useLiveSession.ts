@@ -13,6 +13,32 @@ import useNotification from "./useNotification";
 
 type ExecuteResolver = () => void;
 
+// crypto.randomUUID is only exposed in secure contexts, so it is missing when
+// Kviklet is served over plain HTTP from a non-localhost host. getRandomValues
+// has no such restriction, so fall back to building the v4 UUID by hand.
+export const randomRef = (): string => {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
+
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
+};
+
 const useLiveSession = (
   requestId: string,
   setContent: (content: string) => void,
@@ -242,7 +268,7 @@ const useLiveSession = (
   const debouncedUpdateContent = useMemo(
     () =>
       debounce((content: string) => {
-        const ref = crypto.randomUUID();
+        const ref = randomRef();
         inFlightRefsRef.current.add(ref);
         setIsSyncing(true);
         sendMessage(updateContentMessage, {
