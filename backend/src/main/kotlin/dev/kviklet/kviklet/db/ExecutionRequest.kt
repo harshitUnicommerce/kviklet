@@ -240,6 +240,7 @@ class ExecutionRequestAdapter(
     val connectionRepository: ConnectionRepository,
     val userRepository: UserRepository,
     val connectionAdapter: ConnectionAdapter,
+    val oncallGrantAdapter: OncallGrantAdapter,
 ) {
 
     @Autowired
@@ -261,9 +262,7 @@ class ExecutionRequestAdapter(
         executionRequestEntity.events.add(event)
 
         // Recalculate and update materialized status columns
-        val details = executionRequestEntity.toDetailDto(
-            connectionAdapter.toDto(executionRequestEntity.connection),
-        )
+        val details = toDetails(executionRequestEntity)
         executionRequestEntity.reviewStatus = details.resolveReviewStatus()
         executionRequestEntity.executionStatus = details.resolveExecutionStatus()
 
@@ -314,7 +313,7 @@ class ExecutionRequestAdapter(
             )
         }
 
-        return executionRequestRepository.save(
+        val saved = executionRequestRepository.save(
             ExecutionRequestEntity(
                 connection = connection,
                 title = title,
@@ -335,9 +334,14 @@ class ExecutionRequestAdapter(
                 command = command,
                 temporaryAccessDuration = temporaryAccessDuration?.toMinutes(),
             ),
-        ).toDetailDto(
-            connectionAdapter.toDto(connection),
         )
+        val details = toDetails(saved)
+        val resolvedReviewStatus = details.resolveReviewStatus()
+        if (resolvedReviewStatus != saved.reviewStatus) {
+            saved.reviewStatus = resolvedReviewStatus
+            return toDetails(executionRequestRepository.save(saved))
+        }
+        return details
     }
 
     @Transactional
@@ -385,14 +389,11 @@ class ExecutionRequestAdapter(
         temporaryAccessDuration?.let { executionRequestEntity.temporaryAccessDuration = it.toMinutes() }
 
         executionRequestRepository.save(executionRequestEntity)
-        return executionRequestEntity.toDetailDto(
-            connectionAdapter.toDto(executionRequestEntity.connection),
-        )
+        return toDetails(executionRequestEntity)
     }
 
-    fun listExecutionRequests(): List<ExecutionRequestDetails> = executionRequestRepository.findAllWithDetails().map {
-        it.toDetailDto(connectionAdapter.toDto(it.connection))
-    }
+    fun listExecutionRequests(): List<ExecutionRequestDetails> =
+        toDetailsList(executionRequestRepository.findAllWithDetails())
 
     fun listExecutionRequestsFiltered(
         reviewStatuses: Set<ReviewStatus>? = null,
@@ -403,18 +404,18 @@ class ExecutionRequestAdapter(
         createdBefore: LocalDateTime? = null,
         after: LocalDateTime? = null,
         limit: Int = Int.MAX_VALUE,
-    ): List<ExecutionRequestDetails> = executionRequestRepository.findAllWithDetailsFiltered(
-        reviewStatuses = reviewStatuses,
-        executionStatuses = executionStatuses,
-        connectionIds = connectionIds,
-        authorId = authorId,
-        createdAfter = createdAfter,
-        createdBefore = createdBefore,
-        after = after,
-        limit = limit,
-    ).map {
-        it.toDetailDto(connectionAdapter.toDto(it.connection))
-    }
+    ): List<ExecutionRequestDetails> = toDetailsList(
+        executionRequestRepository.findAllWithDetailsFiltered(
+            reviewStatuses = reviewStatuses,
+            executionStatuses = executionStatuses,
+            connectionIds = connectionIds,
+            authorId = authorId,
+            createdAfter = createdAfter,
+            createdBefore = createdBefore,
+            after = after,
+            limit = limit,
+        ),
+    )
 
     private fun getExecutionRequestDetailsEntity(id: ExecutionRequestId): ExecutionRequestEntity =
         executionRequestRepository.findByIdWithDetails(id)
@@ -427,9 +428,18 @@ class ExecutionRequestAdapter(
         ?: throw EntityNotFound("User Not Found", "User with id $id does not exist.")
 
     @Transactional
-    fun getExecutionRequestDetails(id: ExecutionRequestId): ExecutionRequestDetails = getExecutionRequestDetailsEntity(
-        id,
-    ).toDetailDto(
-        connectionAdapter.toDto(getExecutionRequestDetailsEntity(id).connection),
-    )
+    fun getExecutionRequestDetails(id: ExecutionRequestId): ExecutionRequestDetails =
+        toDetails(getExecutionRequestDetailsEntity(id))
+
+    private fun toDetails(entity: ExecutionRequestEntity): ExecutionRequestDetails {
+        val details = entity.toDetailDto(connectionAdapter.toDto(entity.connection))
+        val authorId = details.request.author.getId() ?: return details
+        return details.withAuthorOncallGrant(oncallGrantAdapter.findActiveForUser(authorId))
+    }
+
+    private fun toDetailsList(entities: List<ExecutionRequestEntity>): List<ExecutionRequestDetails> {
+        val details = entities.map { it.toDetailDto(connectionAdapter.toDto(it.connection)) }
+        val grants = oncallGrantAdapter.findActiveForUsers(details.mapNotNull { it.request.author.getId() })
+        return details.map { it.withAuthorOncallGrant(grants[it.request.author.getId()]) }
+    }
 }

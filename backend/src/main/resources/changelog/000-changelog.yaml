@@ -140,3 +140,12 @@ databaseChangeLog:
   - include:
       file: 048-delete-deny-policies.yaml
       relativeToChangelogFile: true
+  - include:
+      file: 049-add-role-bypass-approval.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: 050-add-oncall-grant-table.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: 051-oncall-grant-approval.yaml
+      relativeToChangelogFile: true
