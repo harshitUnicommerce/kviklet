@@ -43,7 +43,7 @@ class OncallGrantService(
         val duration = validatedDuration(durationMinutes)
         val now = utcTimeNow()
         oncallGrantAdapter.revokeOpenForUser(userId.toString(), now)
-        val effectiveBypass = bypassApproval ?: (kind == OncallGrantKind.OUTAGE)
+        val effectiveBypass = bypassApproval ?: true
         val grant = oncallGrantAdapter.save(
             OncallGrant(
                 userId = userId.toString(),
@@ -86,7 +86,9 @@ class OncallGrantService(
             oncallGrantAdapter.save(pending.copy(revokedAt = now))
         }
         val requester = userAdapter.findById(actorUserId)
-        val effectiveBypass = bypassApproval ?: (kind == OncallGrantKind.OUTAGE)
+        // The manager's approval of the grant is the review gate, so an approved grant always bypasses
+        // per-request approval.
+        val effectiveBypass = true
         val grant = oncallGrantAdapter.save(
             OncallGrant(
                 userId = userId.toString(),

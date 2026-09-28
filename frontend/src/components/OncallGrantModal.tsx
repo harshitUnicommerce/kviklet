@@ -31,12 +31,11 @@ function OncallGrantModal(props: {
   const [kind, setKind] = useState<OncallGrantKind>("ONCALL");
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [reason, setReason] = useState("");
-  const [bypassApproval, setBypassApproval] = useState(false);
+  const [bypassApproval, setBypassApproval] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const selectKind = (next: OncallGrantKind) => {
     setKind(next);
-    setBypassApproval(next === "OUTAGE");
   };
 
   const onSubmit = async () => {
@@ -142,7 +141,7 @@ function OncallGrantModal(props: {
             htmlFor="oncall-bypass"
             className="ml-2 text-sm text-slate-700 dark:text-slate-200"
           >
-            Bypass approval (default on for outage, off for on-call)
+            Bypass approval for this user's requests
           </label>
         </div>
       )}

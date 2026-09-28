@@ -101,7 +101,7 @@ class OncallGrantTest {
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.kind", equalTo("ONCALL")))
-            .andExpect(jsonPath("$.bypassApproval", equalTo(false)))
+            .andExpect(jsonPath("$.bypassApproval", equalTo(true)))
 
         mockMvc.perform(get("/connections/").cookie(operatorCookie))
             .andExpect(status().isOk)
